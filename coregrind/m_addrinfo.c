@@ -154,9 +154,9 @@ void VG_(describe_addr) ( DiEpoch ep, Addr a, /*OUT*/AddrInfo* ai )
             /* It is on thread tid stack. Build a stacktrace, and
                find the frame sp[f] .. sp[f+1] where the address is.
                Store the found frameNo and the corresponding IP in
-               the description.
+               the description. 
                When description is printed, IP will be translated to
-               the function name containing IP.
+               the function name containing IP. 
                Before accepting to describe addr with sp[f] .. sp[f+1],
                we verify the sp looks sane: reasonably sized frame,
                inside the stack.
@@ -186,11 +186,11 @@ void VG_(describe_addr) ( DiEpoch ep, Addr a, /*OUT*/AddrInfo* ai )
       if (aai.name != NULL) {
          ai->tag = Addr_Block;
          if (aai.aid == VG_AR_CLIENT)
-            ai->Addr.Block.block_kind
+            ai->Addr.Block.block_kind 
                = aai.free ? Block_ClientArenaFree : Block_ClientArenaMallocd;
          else
-            ai->Addr.Block.block_kind
-               = aai.free
+            ai->Addr.Block.block_kind 
+               = aai.free 
                   ? Block_ValgrindArenaFree :  Block_ValgrindArenaMallocd;
          ai->Addr.Block.block_desc = aai.name;
          ai->Addr.Block.block_szB = aai.block_szB;
@@ -287,8 +287,8 @@ void VG_(describe_addr) ( DiEpoch ep, Addr a, /*OUT*/AddrInfo* ai )
          return;
       }
 
-      if (seg != NULL
-          && (seg->kind == SkAnonC
+      if (seg != NULL 
+          && (seg->kind == SkAnonC 
               || seg->kind == SkFileC
               || seg->kind == SkShmC)) {
          ai->tag = Addr_SegmentKind;
@@ -324,7 +324,7 @@ void VG_(clear_addrinfo) ( AddrInfo* ai)
       case Addr_Unknown:
          break;
 
-      case Addr_Stack:
+      case Addr_Stack: 
          break;
 
       case Addr_Block:
@@ -432,11 +432,11 @@ static void pp_addrinfo_WRK ( Addr a, const AddrInfo* ai, Bool mc,
          }
          break;
 
-      case Addr_Stack:
-         VG_(emit)( "%sAddress 0x%lx is on thread %s%u's stack%s\n",
-                    xpre, a,
-                    opt_tnr_prefix (ai->Addr.Stack.tinfo),
-                    tnr_else_tid (ai->Addr.Stack.tinfo),
+      case Addr_Stack: 
+         VG_(emit)( "%sAddress 0x%lx is on thread %s%u's stack%s\n", 
+                    xpre, a, 
+                    opt_tnr_prefix (ai->Addr.Stack.tinfo), 
+                    tnr_else_tid (ai->Addr.Stack.tinfo), 
                     xpost );
          if (ai->Addr.Stack.frameNo != -1 && ai->Addr.Stack.IP != 0) {
             const HChar *fn;
@@ -469,8 +469,8 @@ static void pp_addrinfo_WRK ( Addr a, const AddrInfo* ai, Bool mc,
             if (hasfn || hasfile)
                VG_(emit)( "%sin frame #%d, created by %ps (%ps:%s)%s\n",
                           xpre,
-                          ai->Addr.Stack.frameNo,
-                          hasfn ? fn : "???",
+                          ai->Addr.Stack.frameNo, 
+                          hasfn ? fn : "???", 
                           hasfile ? file : "???", strlinenum,
                           xpost );
          }
@@ -480,7 +480,7 @@ static void pp_addrinfo_WRK ( Addr a, const AddrInfo* ai, Bool mc,
             case StackPos_below_stack_ptr:
             case StackPos_guard_page:
                 VG_(emit)("%s%s%ld bytes below stack pointer%s\n",
-                          xpre,
+                          xpre, 
                           ai->Addr.Stack.stackPos == StackPos_guard_page ?
                           "In stack guard protected page, " : "",
                           - ai->Addr.Stack.spoffset,
@@ -531,8 +531,8 @@ static void pp_addrinfo_WRK ( Addr a, const AddrInfo* ai, Bool mc,
                relative,
                ai->Addr.Block.block_desc,
                block_szB,
-               ai->Addr.Block.block_kind==Block_Mallocd ? "alloc'd"
-               : ai->Addr.Block.block_kind==Block_Freed ? "free'd"
+               ai->Addr.Block.block_kind==Block_Mallocd ? "alloc'd" 
+               : ai->Addr.Block.block_kind==Block_Freed ? "free'd" 
                                                         : "client-defined",
                xpost
             );
@@ -571,7 +571,7 @@ static void pp_addrinfo_WRK ( Addr a, const AddrInfo* ai, Bool mc,
                opt_tnr_prefix (ai->Addr.Block.alloc_tinfo),
                tnr_else_tid (ai->Addr.Block.alloc_tinfo),
                xpost
-            );
+            );  
          break;
       }
 
@@ -638,9 +638,9 @@ static void pp_addrinfo_WRK ( Addr a, const AddrInfo* ai, Bool mc,
                     ai->Addr.SegmentKind.hasW ? "w" : "-",
                     ai->Addr.SegmentKind.hasX ? "x" : "-",
                     pp_SegKind(ai->Addr.SegmentKind.segkind),
-                    ai->Addr.SegmentKind.filename ?
+                    ai->Addr.SegmentKind.filename ? 
                     " " : "",
-                    ai->Addr.SegmentKind.filename ?
+                    ai->Addr.SegmentKind.filename ? 
                     ai->Addr.SegmentKind.filename : "",
                     xpost );
          break;
