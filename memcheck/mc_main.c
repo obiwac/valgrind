@@ -52,13 +52,6 @@
 #include "mc_include.h"
 #include "memcheck.h"   /* for client requests */
 
-#include <stddef.h>
-#include <string.h>
-
-#include <sys/exec.h>
-#include <sys/types.h>
-#include <sys/sysctl.h>
-
 /* Set to 1 to do a little more sanity checking */
 #define VG_DEBUG_MEMORY 0
 
@@ -1088,12 +1081,14 @@ static INLINE UWord byte_offset_w ( UWord wordszB, Bool bigendian,
    IAR_NotIgnored:  the usual case -- report errors in this range
    IAR_CommandLine: don't report errors -- from command line setting
    IAR_ClientReq:   don't report errors -- from client request
+   IAR_OSSpecific:  don't report errors -- from OS specific ranges
 */
 typedef
    enum { IAR_INVALID=99,
           IAR_NotIgnored,
           IAR_CommandLine,
-          IAR_ClientReq }
+          IAR_ClientReq,
+          IAR_OSSpecific }
    IARKind;
 
 static const HChar* showIARKind ( IARKind iark )
@@ -1103,6 +1098,7 @@ static const HChar* showIARKind ( IARKind iark )
       case IAR_NotIgnored:  return "NotIgnored";
       case IAR_CommandLine: return "CommandLine";
       case IAR_ClientReq:   return "ClientReq";
+      case IAR_OSSpecific:  return "OSSpecific";
       default:              return "???";
    }
 }
@@ -1110,12 +1106,78 @@ static const HChar* showIARKind ( IARKind iark )
 // RangeMap<IARKind>
 static RangeMap* gIgnoredAddressRanges = NULL;
 
+#if defined(VGO_freebsd)
+
+#include <stddef.h>
+#include <string.h>
+
+#include <sys/exec.h>
+#include <sys/types.h>
+#include <sys/sysctl.h>
+
+#endif /* defined(VGO_freebsd) */
+
 static void init_gIgnoredAddressRanges ( void )
 {
    if (LIKELY(gIgnoredAddressRanges != NULL))
       return;
    gIgnoredAddressRanges = VG_(newRangeMap)( VG_(malloc), "mc.igIAR.1",
                                              VG_(free), IAR_NotIgnored );
+
+#if defined(VGO_freebsd)
+   unsigned long ul_ps_strings;
+   size_t struct_len = sizeof(ul_ps_strings);
+
+   if (sysctlbyname("kern.ps_strings", &ul_ps_strings, &struct_len, NULL, 0) < 0) {
+      return;
+   }
+
+   struct ps_strings* ps_strings = (void*) ul_ps_strings;
+
+   Addr start = (Addr) ps_strings;
+   Addr len = sizeof(*ps_strings);
+
+   VG_(bindRangeMap)(gIgnoredAddressRanges,
+                     start, start+len-1, IAR_OSSpecific);
+
+   unsigned argc = ps_strings->ps_nargvstr;
+   char**   argv = ps_strings->ps_argvstr;
+
+   start = (Addr) argv;
+   len = argc * sizeof(*argv);
+
+   VG_(bindRangeMap)(gIgnoredAddressRanges,
+                     start, start+len-1, IAR_OSSpecific);
+
+   for (size_t i = 0; i < argc; i++) {
+      char* arg = argv[i];
+
+      start = (Addr) arg;
+      len = strlen(arg) + 1;
+
+      VG_(bindRangeMap)(gIgnoredAddressRanges,
+                        start, start+len-1, IAR_OSSpecific);
+   }
+
+   unsigned envc = ps_strings->ps_nenvstr;
+   char**   envv = ps_strings->ps_envstr;
+
+   start = (Addr) envv;
+   len = envc * sizeof(*envv);
+
+   VG_(bindRangeMap)(gIgnoredAddressRanges,
+                     start, start+len-1, IAR_OSSpecific);
+
+   for (size_t i = 0; i < envc; i++) {
+      char* env = envv[i];
+
+      start = (Addr) env;
+      len = strlen(env) + 1;
+
+      VG_(bindRangeMap)(gIgnoredAddressRanges,
+                        start, start+len-1, IAR_OSSpecific);
+   }
+#endif /* defined(VGO_freebsd) */
 }
 
 Bool MC_(in_ignored_range) ( Addr a )
@@ -1131,6 +1193,7 @@ Bool MC_(in_ignored_range) ( Addr a )
       case IAR_NotIgnored:  return False;
       case IAR_CommandLine: return True;
       case IAR_ClientReq:   return True;
+      case IAR_OSSpecific:  return True;
       default: break; /* invalid */
    }
    VG_(tool_panic)("MC_(in_ignore_range)");
@@ -1381,44 +1444,6 @@ void mc_LOADV_128_or_256_slow ( /*OUT*/ULong* res,
       return;
    }
 
-#if defined(VGO_freebsd)
-   unsigned long ul_ps_strings;
-   size_t len = sizeof(ul_ps_strings);
-
-   if (sysctlbyname("kern.ps_strings", &ul_ps_strings, &len, NULL, 0) < 0) {
-      goto error;
-   }
-
-   struct ps_strings* ps_strings = (void*) ul_ps_strings;
-
-   if (a == (Addr) ps_strings) {
-      return;
-   }
-
-   if (a == (Addr) &ps_strings->ps_argvstr || a == (Addr) &ps_strings->ps_nargvstr) {
-      return;
-   }
-
-   if (a == (Addr) ps_strings->ps_argvstr) {
-      return;
-   }
-
-   for (i = 0; i < ps_strings->ps_nargvstr; i++) {
-      if (a == (Addr) &ps_strings->ps_argvstr[i]) {
-         return;
-      }
-
-      char* arg = ps_strings->ps_argvstr[i];
-      len = strlen(arg);
-
-      if (a >= (Addr) arg && a <= (Addr) (arg + len)) {
-         return;
-      }
-   }
-#endif
-
-error:
-
    /* Exemption doesn't apply.  Flag an addressing error in the normal
       way. */
    MC_(record_address_error)( VG_(get_running_tid)(), a, szB, False );
@@ -1597,44 +1622,6 @@ ULong mc_LOADVn_slow ( Addr a, SizeT nBits, Bool bigendian )
       return vbits64;
    }
 
-#if defined(VGO_freebsd)
-   unsigned long ul_ps_strings;
-   size_t len = sizeof(ul_ps_strings);
-
-   if (sysctlbyname("kern.ps_strings", &ul_ps_strings, &len, NULL, 0) < 0) {
-      goto error;
-   }
-
-   struct ps_strings* ps_strings = (void*) ul_ps_strings;
-
-   if (a == (Addr) ps_strings) {
-      return vbits64;
-   }
-
-   if (a == (Addr) &ps_strings->ps_argvstr || a == (Addr) &ps_strings->ps_nargvstr) {
-      return vbits64;
-   }
-
-   if (a == (Addr) ps_strings->ps_argvstr) {
-      return vbits64;
-   }
-
-   for (i = 0; i < ps_strings->ps_nargvstr; i++) {
-      if (a == (Addr) &ps_strings->ps_argvstr[i]) {
-         return vbits64;
-      }
-
-      char* arg = ps_strings->ps_argvstr[i];
-      len = strlen(arg);
-
-      if (a >= (Addr) arg && a <= (Addr) (arg + len)) {
-         return vbits64;
-      }
-   }
-#endif
-
-error:
-
    /* Exemption doesn't apply.  Flag an addressing error in the normal
       way. */
    MC_(record_address_error)( VG_(get_running_tid)(), a, szB, False );
@@ -1731,44 +1718,6 @@ void mc_STOREVn_slow ( Addr a, SizeT nBits, ULong vbytes, Bool bigendian )
       if (!ok) n_addrs_bad++;
       vbytes >>= 8;
    }
-
-#if defined(VGO_freebsd)
-   unsigned long ul_ps_strings;
-   size_t len = sizeof(ul_ps_strings);
-
-   if (sysctlbyname("kern.ps_strings", &ul_ps_strings, &len, NULL, 0) < 0) {
-      goto error;
-   }
-
-   struct ps_strings* ps_strings = (void*) ul_ps_strings;
-
-   if (a == (Addr) ps_strings) {
-      return;
-   }
-
-   if (a == (Addr) &ps_strings->ps_argvstr || a == (Addr) &ps_strings->ps_nargvstr) {
-      return;
-   }
-
-   if (a == (Addr) ps_strings->ps_argvstr) {
-      return;
-   }
-
-   for (i = 0; i < ps_strings->ps_nargvstr; i++) {
-      if (a == (Addr) &ps_strings->ps_argvstr[i]) {
-         return;
-      }
-
-      char* arg = ps_strings->ps_argvstr[i];
-      len = strlen(arg);
-
-      if (a >= (Addr) arg && a <= (Addr) (arg + len)) {
-         return;
-      }
-   }
-#endif
-
-error:
 
    /* If an address error has happened, report it. */
    if (n_addrs_bad > 0)
@@ -8625,6 +8574,12 @@ static void mc_pre_clo_init(void)
 
    /* Check some assertions to do with the instrumentation machinery. */
    MC_(do_instrumentation_startup_checks)();
+
+   /* If on FreeBSD, we'll always need to ignore the ranges from the
+      kern.ps_strings sysctl. */
+#if defined(VGO_freebsd)
+   init_gIgnoredAddressRanges();
+#endif /* defined(VGO_freebsd) */
 }
 
 STATIC_ASSERT(sizeof(UWord) == sizeof(SizeT));
