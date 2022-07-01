@@ -67,7 +67,7 @@ shift; # Remove $ala from @ARGV
 die "Bogus alt-load address"
     if (length($ala) < 3 || index($ala, "0x") != 0);
 
-my $cmd = join(" ", @ARGV, "-static -Wl,@FLAG_T_TEXT@=$ala -lc");
+my $cmd = join(" ", @ARGV, "-static -Wl,@FLAG_T_TEXT@=$ala");
 
 #print "link_tool_exe_freebsd: $cmd\n";
 

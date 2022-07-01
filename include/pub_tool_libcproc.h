@@ -72,6 +72,10 @@ extern Int  VG_(fork)   ( void);
 extern void VG_(execv)  ( const HChar* filename, const HChar** argv );
 extern Int  VG_(sysctl) ( Int *name, UInt namelen, void *oldp, SizeT *oldlenp, const void *newp, SizeT newlen );
 
+#if defined(VGO_freebsd)
+extern Int  VG_(sysctlbyname) ( const HChar *name, void *oldp, SizeT *oldlenp, const void *newp, SizeT newlen );
+#endif
+
 /* ---------------------------------------------------------------------
    Resource limits and capabilities
    ------------------------------------------------------------------ */

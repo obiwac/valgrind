@@ -56,7 +56,7 @@
 /* The full name of Valgrind's stage1 (launcher) executable.  This is
    set by stage1 and read by stage2, and is used for recursive
    invocations of Valgrind on child processes. 
-   
+
    For self-hosting, the inner and outer Valgrinds must use different
    names to avoid collisions.  */
 #ifdef ENABLE_INNER
@@ -87,7 +87,6 @@ extern void VG_(do_atfork_child)  ( ThreadId tid );
 
 #if defined(VGO_freebsd)
 // sysctl, modfind
-extern Int VG_(sysctlbyname)(const HChar *name, void *oldp, SizeT *oldlenp, const void *newp, SizeT newlen);
 extern Int VG_(getosreldate)(void);
 extern Bool VG_(is32on64)(void);
 #endif

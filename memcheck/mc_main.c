@@ -37,6 +37,7 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_libcassert.h"
 #include "pub_tool_libcprint.h"
+#include "pub_tool_libcproc.h"
 #include "pub_tool_machine.h"
 #include "pub_tool_mallocfree.h"
 #include "pub_tool_options.h"
@@ -45,6 +46,7 @@
 #include "pub_tool_replacemalloc.h"
 #include "pub_tool_tooliface.h"
 #include "pub_tool_threadstate.h"
+#include "pub_tool_vki.h"
 #include "pub_tool_xarray.h"
 #include "pub_tool_xtree.h"
 #include "pub_tool_xtmemory.h"
@@ -1106,17 +1108,6 @@ static const HChar* showIARKind ( IARKind iark )
 // RangeMap<IARKind>
 static RangeMap* gIgnoredAddressRanges = NULL;
 
-#if defined(VGO_freebsd)
-
-#include <stddef.h>
-#include <string.h>
-
-#include <sys/exec.h>
-#include <sys/types.h>
-#include <sys/sysctl.h>
-
-#endif /* defined(VGO_freebsd) */
-
 static void init_gIgnoredAddressRanges ( void )
 {
    if (LIKELY(gIgnoredAddressRanges != NULL))
@@ -1126,13 +1117,13 @@ static void init_gIgnoredAddressRanges ( void )
 
 #if defined(VGO_freebsd)
    unsigned long ul_ps_strings;
-   size_t struct_len = sizeof(ul_ps_strings);
+   SizeT struct_len = sizeof(ul_ps_strings);
 
-   if (sysctlbyname("kern.ps_strings", &ul_ps_strings, &struct_len, NULL, 0) < 0) {
+   if (VG_(sysctlbyname)("kern.ps_strings", &ul_ps_strings, &struct_len, NULL, 0) < 0) {
       return;
    }
 
-   struct ps_strings* ps_strings = (void*) ul_ps_strings;
+   struct vki_ps_strings* ps_strings = (void*) ul_ps_strings;
 
    Addr start = (Addr) ps_strings;
    Addr len = sizeof(*ps_strings);
@@ -1153,7 +1144,7 @@ static void init_gIgnoredAddressRanges ( void )
       char* arg = argv[i];
 
       start = (Addr) arg;
-      len = strlen(arg) + 1;
+      len = VG_(strlen)(arg) + 1;
 
       VG_(bindRangeMap)(gIgnoredAddressRanges,
                         start, start+len-1, IAR_OSSpecific);
@@ -1172,7 +1163,7 @@ static void init_gIgnoredAddressRanges ( void )
       char* env = envv[i];
 
       start = (Addr) env;
-      len = strlen(env) + 1;
+      len = VG_(strlen)(env) + 1;
 
       VG_(bindRangeMap)(gIgnoredAddressRanges,
                         start, start+len-1, IAR_OSSpecific);
