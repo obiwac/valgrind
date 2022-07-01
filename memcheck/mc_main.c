@@ -37,6 +37,7 @@
 #include "pub_tool_libcbase.h"
 #include "pub_tool_libcassert.h"
 #include "pub_tool_libcprint.h"
+#include "pub_tool_libcproc.h"
 #include "pub_tool_machine.h"
 #include "pub_tool_mallocfree.h"
 #include "pub_tool_options.h"
@@ -45,6 +46,7 @@
 #include "pub_tool_replacemalloc.h"
 #include "pub_tool_tooliface.h"
 #include "pub_tool_threadstate.h"
+#include "pub_tool_vki.h"
 #include "pub_tool_xarray.h"
 #include "pub_tool_xtree.h"
 #include "pub_tool_xtmemory.h"
@@ -1081,6 +1083,7 @@ static INLINE UWord byte_offset_w ( UWord wordszB, Bool bigendian,
    IAR_NotIgnored:  the usual case -- report errors in this range
    IAR_CommandLine: don't report errors -- from command line setting
    IAR_ClientReq:   don't report errors -- from client request
+   IAR_OSSpecific:  don't report errors -- from OS specific ranges
 */
 typedef
    enum { IAR_INVALID=99,
@@ -1096,6 +1099,7 @@ static const HChar* showIARKind ( IARKind iark )
       case IAR_NotIgnored:  return "NotIgnored";
       case IAR_CommandLine: return "CommandLine";
       case IAR_ClientReq:   return "ClientReq";
+      case IAR_OSSpecific:  return "OSSpecific";
       default:              return "???";
    }
 }
@@ -1109,6 +1113,61 @@ static void init_gIgnoredAddressRanges ( void )
       return;
    gIgnoredAddressRanges = VG_(newRangeMap)( VG_(malloc), "mc.igIAR.1",
                                              VG_(free), IAR_NotIgnored );
+
+#if defined(VGO_freebsd)
+   unsigned long ul_ps_strings;
+   SizeT struct_len = sizeof(ul_ps_strings);
+
+   if (VG_(sysctlbyname)("kern.ps_strings", &ul_ps_strings, &struct_len, NULL, 0) < 0) {
+      return;
+   }
+
+   struct vki_ps_strings* ps_strings = (void*) ul_ps_strings;
+
+   Addr start = (Addr) ps_strings;
+   Addr len = sizeof(*ps_strings);
+
+   VG_(bindRangeMap)(gIgnoredAddressRanges,
+                     start, start+len-1, IAR_OSSpecific);
+
+   unsigned argc = ps_strings->ps_nargvstr;
+   char**   argv = ps_strings->ps_argvstr;
+
+   start = (Addr) argv;
+   len = argc * sizeof(*argv);
+
+   VG_(bindRangeMap)(gIgnoredAddressRanges,
+                     start, start+len-1, IAR_OSSpecific);
+
+   for (size_t i = 0; i < argc; i++) {
+      char* arg = argv[i];
+
+      start = (Addr) arg;
+      len = VG_(strlen)(arg) + 1;
+
+      VG_(bindRangeMap)(gIgnoredAddressRanges,
+                        start, start+len-1, IAR_OSSpecific);
+   }
+
+   unsigned envc = ps_strings->ps_nenvstr;
+   char**   envv = ps_strings->ps_envstr;
+
+   start = (Addr) envv;
+   len = envc * sizeof(*envv);
+
+   VG_(bindRangeMap)(gIgnoredAddressRanges,
+                     start, start+len-1, IAR_OSSpecific);
+
+   for (size_t i = 0; i < envc; i++) {
+      char* env = envv[i];
+
+      start = (Addr) env;
+      len = VG_(strlen)(env) + 1;
+
+      VG_(bindRangeMap)(gIgnoredAddressRanges,
+                        start, start+len-1, IAR_OSSpecific);
+   }
+#endif /* defined(VGO_freebsd) */
 }
 
 Bool MC_(in_ignored_range) ( Addr a )
@@ -1124,6 +1183,7 @@ Bool MC_(in_ignored_range) ( Addr a )
       case IAR_NotIgnored:  return False;
       case IAR_CommandLine: return True;
       case IAR_ClientReq:   return True;
+      case IAR_OSSpecific:  return True;
       default: break; /* invalid */
    }
    VG_(tool_panic)("MC_(in_ignore_range)");
@@ -8504,6 +8564,13 @@ static void mc_pre_clo_init(void)
 
    /* Check some assertions to do with the instrumentation machinery. */
    MC_(do_instrumentation_startup_checks)();
+
+
+   /* If on FreeBSD, we'll always need to ignore the ranges from the
+      kern.ps_strings sysctl. */
+#if defined(VGO_freebsd)
+   init_gIgnoredAddressRanges();
+#endif /* defined(VGO_freebsd) */
 }
 
 STATIC_ASSERT(sizeof(UWord) == sizeof(SizeT));
