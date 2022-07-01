@@ -56,7 +56,7 @@
 /* The full name of Valgrind's stage1 (launcher) executable.  This is
    set by stage1 and read by stage2, and is used for recursive
    invocations of Valgrind on child processes. 
-
+   
    For self-hosting, the inner and outer Valgrinds must use different
    names to avoid collisions.  */
 #ifdef ENABLE_INNER
